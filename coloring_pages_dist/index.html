@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Раскраски для детей</title>
+<style>
+  :root{
+    --accent:#DFCCA4;
+    --bg1:#0f172a;
+    --bg2:#1e293b;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{
+    margin:0; padding:0; min-height:100%;
+    font-family:'Manrope',sans-serif;
+    background: #131313;
+    color:#fff;
+  }
+  #page{
+    padding:28px 20px 40px;
+    max-width:1100px;
+    margin:0 auto;
+  }
+  h1{
+    font-size:22px;
+    text-align:center;
+    color:var(--accent);
+    margin:0 0 50px;
+    text-shadow:0 3px 10px rgba(0,0,0,.5);
+  }
+  #hint{
+    text-align:center;
+    font-size:14px;
+    opacity:.75;
+    max-width:520px;
+    margin:0 auto 26px;
+    line-height:1.4;
+  }
+  #telegramHint{
+    display:none;
+    background:rgba(223,204,164,.15);
+    border:1px solid rgba(223,204,164,.4);
+    border-radius:14px;
+    padding:12px 16px;
+    margin:0 auto 26px;
+    max-width:480px;
+    font-size:14px;
+    text-align:center;
+    line-height:1.5;
+  }
+  #grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));
+    gap:14px;
+  }
+  .card{
+    background:#fff;
+    border-radius:16px;
+    overflow:hidden;
+    cursor:pointer;
+    box-shadow:0 6px 18px rgba(0,0,0,.35);
+    transition: transform .15s ease;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    aspect-ratio: 3/4;
+  }
+  .card:active{ transform:scale(0.96); }
+  .card canvas.cardCanvas{
+    width:100%;
+    height:100%;
+    object-fit:contain;
+    display:block;
+  }
+
+  #overlay{
+    position:fixed; inset:0;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    background:rgba(10,14,25,.92);
+    z-index:9999;
+    padding:20px;
+  }
+  #overlay.show{ display:flex; }
+  #overlayInner{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:16px;
+    max-width:520px;
+    width:100%;
+  }
+  #overlayImgWrap{
+    background:#fff;
+    border-radius:16px;
+    padding:8px;
+    max-height:62vh;
+    display:flex;
+  }
+  #overlayImgWrap canvas{
+    max-width:100%;
+    max-height:60vh;
+    object-fit:contain;
+    border-radius:10px;
+    display:block;
+  }
+  #overlayButtons{
+    display:flex;
+    gap:12px;
+    flex-wrap:wrap;
+    justify-content:center;
+  }
+  button.actionBtn{
+    font-size:16px;
+    font-weight:bold;
+    padding:13px 26px;
+    border:none;
+    border-radius:100px;
+    background:#DFCCA4;
+    color:#131313;
+    box-shadow:0 6px 20px rgba(223,204,164,.35);
+    cursor:pointer;
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+  }
+  button.actionBtn:active{ transform:scale(0.96); }
+  #closeBtn{
+    position:fixed;
+    top:16px; right:20px;
+    z-index:10000;
+    color:#fff;
+    font-size:30px;
+    cursor:pointer;
+    text-shadow:0 2px 6px rgba(0,0,0,.6);
+    line-height:1;
+  }
+  #downloadedNote{
+    font-size:13px;
+    opacity:.75;
+    text-align:center;
+    min-height:18px;
+  }
+
+  /* Печать: на экране скрыто, при печати — только это */
+  #printArea{ display:none; }
+  #printArea img{ width:100%; height:auto; display:block; }
+
+  @media print{
+    body > *{ display:none !important; }
+    #printArea{ display:block !important; }
+    @page{ margin:10mm; }
+  }
+</style>
+</head>
+<body>
+<div id="page">
+  <h1>Выбери рисунок, который хочешь раскрасить. Нажми на него и сохрани на устройстве. Попроси взрослого его распечатать.</h1>
+
+  <div id="telegramHint">
+    📱 Вы открыли страницу в Telegram — тут скачивание может не работать.<br>
+    Нажмите на «⋯» (три точки) вверху или в углу экрана и выберите <b>«Открыть в браузере»</b> — там всё скачается без проблем.
+  </div>
+
+  <div id="grid"></div>
+</div>
+
+<div id="printArea"><img id="printImg" alt=""></div>
+
+<div id="overlay">
+  <div id="closeBtn">✕</div>
+  <div id="overlayInner">
+    <div id="overlayImgWrap"><canvas id="overlayImg"></canvas></div>
+    <div id="overlayButtons">
+      <button class="actionBtn" id="downloadBtn">⬇ Скачать</button>
+      <button class="actionBtn" id="printBtn">🖨 Распечатать</button>
+    </div>
+    <div id="downloadedNote"></div>
+  </div>
+</div>
+
+<script>
+// Полностью отключаем контекстное меню на странице — иначе через "Открыть фрейм
+// в новой вкладке" или "Копировать адрес картинки" виден технический адрес файлов.
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+function isMobileDevice(){
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+}
+
+function isTelegramInApp(){
+  return /Telegram/i.test(navigator.userAgent) ||
+         !!window.TelegramWebviewProxy ||
+         !!window.TelegramWebviewProxyProto;
+}
+
+if(isTelegramInApp()){
+  document.getElementById('telegramHint').style.display = 'block';
+}
+
+const TOTAL = 10;
+const grid = document.getElementById('grid');
+const overlay = document.getElementById('overlay');
+const overlayImg = document.getElementById('overlayImg');
+const closeBtn = document.getElementById('closeBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+const printBtn = document.getElementById('printBtn');
+const downloadedNote = document.getElementById('downloadedNote');
+
+let currentSrc = '';
+let currentName = '';
+
+function drawImageToCanvas(canvas, src){
+  const img = new Image();
+  img.onload = () => {
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    canvas.getContext('2d').drawImage(img, 0, 0);
+  };
+  img.src = src;
+}
+
+const lazyObserver = new IntersectionObserver((entries) => {
+  entries.forEach((entry) => {
+    if(entry.isIntersecting){
+      const canvas = entry.target;
+      drawImageToCanvas(canvas, canvas.dataset.src);
+      lazyObserver.unobserve(canvas);
+    }
+  });
+}, { rootMargin: '200px' });
+
+for(let i=1; i<=TOTAL; i++){
+  const card = document.createElement('div');
+  card.className = 'card';
+  const canvas = document.createElement('canvas');
+  canvas.className = 'cardCanvas';
+  canvas.dataset.src = `assets/thumbs/${i}.jpg`;
+  canvas.setAttribute('aria-label', `Раскраска ${i}`);
+  card.appendChild(canvas);
+  card.addEventListener('click', () => openOverlay(i));
+  grid.appendChild(card);
+  lazyObserver.observe(canvas);
+}
+
+function openOverlay(i){
+  currentSrc = `assets/${i}.jpg`;
+  currentName = `raskraska-${i}.jpg`;
+  drawImageToCanvas(overlayImg, currentSrc);
+  downloadedNote.textContent = '';
+  downloadedNote.className = '';
+  overlay.classList.add('show');
+}
+
+function closeOverlay(){
+  overlay.classList.remove('show');
+}
+
+closeBtn.addEventListener('click', closeOverlay);
+overlay.addEventListener('click', (e) => {
+  if(e.target === overlay) closeOverlay();
+});
+
+downloadBtn.addEventListener('click', async () => {
+  if(isTelegramInApp()){
+    downloadedNote.textContent = 'В Telegram скачивание может не работать — откройте страницу через «⋯» → «Открыть в браузере».';
+    downloadedNote.className = 'error';
+  }
+
+  try{
+    if(!isTelegramInApp()){
+      downloadedNote.textContent = 'Готовим файл...';
+      downloadedNote.className = '';
+    }
+    const resp = await fetch(currentSrc);
+    const blob = await resp.blob();
+    const file = new File([blob], currentName, { type: blob.type });
+
+    // На телефонах (особенно iPhone) открываем нативное меню "Сохранить/Поделиться"
+    if(isMobileDevice() && navigator.canShare && navigator.canShare({ files: [file] })){
+      await navigator.share({ files: [file], title: 'Раскраска' });
+      downloadedNote.textContent = 'Готово! ✅';
+      downloadedNote.className = 'success';
+      return;
+    }
+
+    // На компьютере — обычное скачивание файла
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = currentName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    downloadedNote.textContent = 'Сохранено! ✅';
+    downloadedNote.className = 'success';
+  }catch(e){
+    if(e && e.name === 'AbortError'){
+      // пользователь сам закрыл окно "Поделиться" — не ошибка
+      downloadedNote.textContent = '';
+      downloadedNote.className = '';
+      return;
+    }
+    // запасной вариант, если fetch/share не сработали
+    const a = document.createElement('a');
+    a.href = currentSrc;
+    a.download = currentName;
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    if(!isTelegramInApp()){
+      downloadedNote.textContent = 'Открыли картинку — сохраните её вручную (долгий тап → «Сохранить изображение»).';
+      downloadedNote.className = '';
+    }
+  }
+});
+
+const printImg = document.getElementById('printImg');
+
+printBtn.addEventListener('click', () => {
+  printImg.src = currentSrc;
+  // печатаем прямо в этой же вкладке — на мобильных открытие нового окна
+  // часто не даёт вызвать системную печать корректно
+  setTimeout(() => { window.print(); }, 50);
+});
+
+</script>
+</body>
+</html>
